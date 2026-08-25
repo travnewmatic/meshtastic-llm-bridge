@@ -1,0 +1,9 @@
+# Runtime dependencies for bridge.py (pytest is test-only, excluded).
+# Pinned to the versions verified against the LAN radio's TCP API.
+meshtastic[cli]==2.7.11
+pypubsub==4.0.7
+requests==2.34.2
+python-dotenv
+openai
+anthropic
+feedparser

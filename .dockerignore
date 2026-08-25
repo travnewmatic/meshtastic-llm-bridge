@@ -1,0 +1,13 @@
+# Keep the build context lean — only bridge.py + tools/ + requirements.txt are COPYed.
+.git
+.gitignore
+venv/
+__pycache__/
+*.pyc
+tests/
+docs/
+README.md
+README.zh-TW.md
+.env
+Dockerfile
+.dockerignore

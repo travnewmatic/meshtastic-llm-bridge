@@ -10,6 +10,7 @@ import threading
 import types
 
 import meshtastic.serial_interface
+import meshtastic.tcp_interface
 from pubsub import pub
 
 # Meshtastic CLI is assumed to be installed in the virtual environment
@@ -21,7 +22,8 @@ load_dotenv()
 
 # --- Configuration ---
 # General
-MESHTASTIC_DEVICE_PATH = os.getenv("MESHTASTIC_DEVICE_PATH", "/dev/ttyUSB0") # e.g., /dev/ttyUSB0 on Linux, /dev/cu.usbserial-XXXX on macOS
+MESHTASTIC_DEVICE_PATH = os.getenv("MESHTASTIC_DEVICE_PATH", "/dev/ttyUSB0")
+MESHTASTIC_HOST = os.getenv("MESHTASTIC_HOST", "") # e.g. 192.168.68.63 for a LAN node; empty = use USB serial
 MESHTASTIC_LONGNAME = os.getenv("MESHTASTIC_LONGNAME", "MeshtasticAI")
 LOCALIZATION = os.getenv("LOCALIZATION", "TW")
 
@@ -582,7 +584,10 @@ def _connect_with_retry():
     global _interface
     while True:
         try:
-            _interface = meshtastic.serial_interface.SerialInterface(devPath=MESHTASTIC_DEVICE_PATH)
+            if MESHTASTIC_HOST:
+                _interface = meshtastic.tcp_interface.TCPInterface(MESHTASTIC_HOST, debugOut=None, timeout=30)
+            else:
+                _interface = meshtastic.serial_interface.SerialInterface(devPath=MESHTASTIC_DEVICE_PATH)
             print("Meshtastic 介面已連線。")
             return
         except Exception as e:
