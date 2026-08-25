@@ -4,6 +4,21 @@
 
 [繁體中文](README.zh-TW.md) | English
 
+## 📋 TO-DO
+
+- [ ] **Access control (security)** — the bridge currently responds to **any** inbound text message from **any** node on the mesh. Restrict responses to an allowlist of authorized radios (Travis's nodes) and ignore everyone else.
+  - Add a `MESHTASTIC_ALLOWED_NODES` env var (comma-separated node IDs, e.g. `!aaaa1111,!bbbb2222`).
+  - In `_on_receive` (`bridge.py`), compare `packet.get("fromId")` against the allowlist; drop (log, no LLM call) non-matches.
+  - Accept both `!hex` and decimal node-number forms (normalize before comparing).
+  - Decide + document default behavior when unset: fail-open (current) vs. fail-closed (recommended for a shared mesh).
+  - Document the new env var in the README.
+  - Manual test: authorized node gets a reply, unauthorized node does not.
+- [ ] **Sidecar deployment** — wire the image into the Hermes pod as a sidecar (k3s-bootstrap, branch + PR). Point `LOCAL_LLM_1_BASE_URL` at the in-cluster vLLM endpoint for offline mode; ensure network access to the radio's TCP port.
+- [ ] **Confirm authorized node allowlist** — verify which node IDs are actually Travis's radios before locking down (run `list_nodes.py` to identify your own radios).
+
+---
+
+
 A resilient, standalone Python bridge connecting your Meshtastic device to powerful Large Language Models (LLMs). This project is designed for **"apocalypse-grade" off-grid communication**, allowing you to interact with AI even when the internet is down.
 
 It intelligently switches between online (cloud LLM providers such as OpenAI, Gemini, Groq, Mistral, OpenRouter, Anthropic, or any custom endpoint) and offline (local LLMs via any OpenAI-compatible backend, such as LM Studio or Ollama) modes, providing robust AI assistance in any scenario.
