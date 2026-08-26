@@ -6,13 +6,11 @@
 
 ## 📋 TO-DO
 
-- [ ] **Access control (security)** — the bridge currently responds to **any** inbound text message from **any** node on the mesh. Restrict responses to an allowlist of authorized radios (Travis's nodes) and ignore everyone else.
-  - Add a `MESHTASTIC_ALLOWED_NODES` env var (comma-separated node IDs, e.g. `!aaaa1111,!bbbb2222`).
-  - In `_on_receive` (`bridge.py`), compare `packet.get("fromId")` against the allowlist; drop (log, no LLM call) non-matches.
-  - Accept both `!hex` and decimal node-number forms (normalize before comparing).
-  - Decide + document default behavior when unset: fail-open (current) vs. fail-closed (recommended for a shared mesh).
-  - Document the new env var in the README.
-  - Manual test: authorized node gets a reply, unauthorized node does not.
+- [x] **Access control (security)** — DONE. The bridge now answers only nodes on the `MESHTASTIC_ALLOWED_NODES` allowlist and ignores everyone else.
+  - `MESHTASTIC_ALLOWED_NODES` env var (comma-separated node IDs, e.g. `!aaaa1111,!bbbb2222`); accepts both `!hex` and decimal node-number forms (normalized to `!hex` before comparing).
+  - In `_on_receive` (`bridge.py`), the sender is checked against the allowlist **before** any LLM call; non-matches are logged and dropped (no reply).
+  - **Fails closed**: when `MESHTASTIC_ALLOWED_NODES` is unset or empty the bridge answers **nobody** and logs a warning — the secure default for a shared mesh.
+  - Documented in the README env-var section and the Dockerfile header.
 - [ ] **Sidecar deployment** — wire the image into the Hermes pod as a sidecar (k3s-bootstrap, branch + PR). Point `LOCAL_LLM_1_BASE_URL` at the in-cluster vLLM endpoint for offline mode; ensure network access to the radio's TCP port.
 - [ ] **Confirm authorized node allowlist** — verify which node IDs are actually Travis's radios before locking down (run `list_nodes.py` to identify your own radios).
 
@@ -111,6 +109,10 @@ Create a `.env` file in the project root with:
 MESHTASTIC_DEVICE_PATH=/dev/ttyUSB0
 MESHTASTIC_LONGNAME=MeshtasticAI
 LOCALIZATION=TW
+
+# Access control: comma-separated node IDs the bridge will answer (e.g. !aaaa1111,!bbbb2222).
+# Accepts !hex and/or decimal node numbers. UNSET or EMPTY = fail closed (answers nobody).
+MESHTASTIC_ALLOWED_NODES=
 
 # Cloud LLM providers (ordered fallback list, numbered slots — add as many as you like)
 # provider: openai | gemini | groq | mistral | openrouter | anthropic | custom

@@ -6,6 +6,11 @@
 #
 # Config is injected via environment variables (see README); a .env file in the
 # working dir is optional and read by python-dotenv if present.
+#
+# Access control: set MESHTASTIC_ALLOWED_NODES to a comma-separated list of node
+# IDs (e.g. !aaaa1111,!bbbb2222) the bridge will answer. Both !hex and decimal
+# node-number forms are accepted. If left unset/empty the bridge FAILS CLOSED and
+# answers nobody — always set it for a real deployment.
 FROM python:3.13-slim
 
 # Run as a non-root user (sidecar best practice).

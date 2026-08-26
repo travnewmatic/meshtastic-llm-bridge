@@ -25,6 +25,12 @@ load_dotenv()
 MESHTASTIC_DEVICE_PATH = os.getenv("MESHTASTIC_DEVICE_PATH", "/dev/ttyUSB0")
 MESHTASTIC_HOST = os.getenv("MESHTASTIC_HOST", "") # e.g. 192.168.68.63 for a LAN node; empty = use USB serial
 MESHTASTIC_LONGNAME = os.getenv("MESHTASTIC_LONGNAME", "MeshtasticAI")
+# Access control: comma-separated allowlist of node IDs the bridge will answer.
+# Accepts "!hex" (e.g. !849b6f80) and/or decimal node numbers; both forms are
+# normalized to the same canonical "!hex" form before comparison. When unset or
+# empty the bridge FAILS CLOSED: it answers nobody (and logs a warning) rather
+# than opening itself up to every node on the mesh.
+MESHTASTIC_ALLOWED_NODES = os.getenv("MESHTASTIC_ALLOWED_NODES", "")
 LOCALIZATION = os.getenv("LOCALIZATION", "TW")
 
 # --- LLM Provider 設定（雲端多家備援 + 本地任意 OpenAI-compat backend）---
@@ -515,14 +521,77 @@ def get_node_location(node_id_to_find):
 
     return (lat, lon), None
 
+def _normalize_node_id(node_id):
+    """Normalize a Meshtastic node ID to the canonical "!hex" form.
+
+    The library may hand us the sender as a decimal int (fromId) or a
+    "!hex" string; both are reduced to the same "!hex" so allowlist
+    entries match regardless of which form appears.
+    """
+    if node_id is None:
+        return None
+    s = str(node_id).strip()
+    if not s:
+        return None
+    if s.startswith("!"):
+        hexpart = s[1:]
+        try:
+            return "!" + format(int(hexpart, 16), "x")
+        except ValueError:
+            return s
+    try:
+        return "!" + format(int(s, 10), "x")
+    except ValueError:
+        return s
+
+
+def _load_allowed_nodes():
+    """Parse MESHTASTIC_ALLOWED_NODES into a set of normalized node IDs.
+
+    Returns an empty set when the env var is unset/blank — the caller
+    treats that as FAIL CLOSED (answer nobody), which is the intended
+    secure default for a shared mesh.
+    """
+    allowed = set()
+    for raw in MESHTASTIC_ALLOWED_NODES.split(","):
+        raw = raw.strip()
+        if not raw:
+            continue
+        norm = _normalize_node_id(raw)
+        if norm:
+            allowed.add(norm)
+    return allowed
+
+
+def _is_authorized_node(sender_id):
+    """Return True only if sender_id is in the configured allowlist.
+
+    Fails CLOSED: an empty/missing allowlist means nobody is authorized.
+    """
+    allowed = _load_allowed_nodes()
+    if not allowed:
+        return False
+    return _normalize_node_id(sender_id) in allowed
+
+
 def _on_receive(packet, interface):
     """pypubsub callback：收到 Meshtastic 文字訊息時觸發"""
     try:
         decoded = packet.get("decoded", {})
         text = decoded.get("text")
         sender_id = packet.get("fromId")
-        if text and sender_id:
-            handle_incoming_meshtastic_message(sender_id, text)
+        if not (text and sender_id):
+            return
+        # Access control: only answer nodes on the allowlist. Fails closed
+        # when MESHTASTIC_ALLOWED_NODES is unset/empty (answer nobody).
+        if not _is_authorized_node(sender_id):
+            print(
+                f"⛔ 忽略未授權節點 {sender_id} 的訊息（不在 MESHTASTIC_ALLOWED_NODES 白名單）"
+                f" / Ignoring unauthorized node {sender_id} (not in MESHTASTIC_ALLOWED_NODES)",
+                file=sys.stderr,
+            )
+            return
+        handle_incoming_meshtastic_message(sender_id, text)
     except Exception as e:
         print(f"處理收到訊息時發生錯誤: {e}", file=sys.stderr)
 
@@ -616,6 +685,15 @@ def _on_connection_lost(interface):
 def main_loop():
     print("Meshtastic LLM Bridge 已啟動（Python API 模式）。正在連線 Meshtastic 裝置...")
     print(f"本地工具路徑: {os.getcwd()}/tools/taiwan/")
+    _allowed_boot = _load_allowed_nodes()
+    if _allowed_boot:
+        print(f"🔐 存取控制已啟用：僅回應白名單節點 {sorted(_allowed_boot)}")
+    else:
+        print(
+            "⚠️ MESHTASTIC_ALLOWED_NODES 未設定：橋接將不回應任何節點（fail-closed）。"
+            "設定 MESHTASTIC_ALLOWED_NODES 以允許特定節點。",
+            file=sys.stderr,
+        )
 
     pub.subscribe(_on_receive, "meshtastic.receive.text")
     pub.subscribe(_on_connection_lost, "meshtastic.connection.lost")
