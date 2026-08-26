@@ -287,6 +287,30 @@ def check_internet_connection():
         last_internet_check = time.time()
     return internet_connected
 
+def _chunk_for_lora(text, data_payload_len=233, prefix_budget=12):
+    """Split text into UTF-8-safe chunks that each fit in one LoRa payload.
+
+    Meshtastic's hard limit is DATA_PAYLOAD_LEN (233) BYTES per decoded
+    payload. Splitting by character count breaks on multi-byte UTF-8
+    (em-dashes, arrows, CJK, emoji) because N chars can be > N bytes, and
+    the (N/M) prefix adds more. Split by bytes instead, backing off to a
+    character boundary so we never split a multi-byte sequence.
+    """
+    max_bytes = data_payload_len - prefix_budget
+    data = text.encode("utf-8")
+    raw = []
+    start = 0
+    n = len(data)
+    while start < n:
+        end = min(start + max_bytes, n)
+        if end < n:
+            while end > start and (data[end] & 0xC0) == 0x80:
+                end -= 1
+        raw.append(data[start:end].decode("utf-8"))
+        start = end
+    return raw
+
+
 def send_meshtastic_message(text, destination_id=None, reply_id=None):
     """透過 Meshtastic Python API 發送文字訊息，處理長訊息切分
 
@@ -298,7 +322,7 @@ def send_meshtastic_message(text, destination_id=None, reply_id=None):
     if _interface is None:
         print("❌ 無法發送：Meshtastic 介面尚未連線", file=sys.stderr)
         return False
-    chunks = [text[i:i+MAX_MESHTASTIC_PAYLOAD] for i in range(0, len(text), MAX_MESHTASTIC_PAYLOAD)]
+    chunks = _chunk_for_lora(text)
     dest = destination_id if destination_id else "^all"
 
     for i, chunk in enumerate(chunks):
