@@ -271,6 +271,17 @@ def _handle_emergency_broadcast(kind: str, sender_id: str, extra_text: str):
 
 MAX_MESHTASTIC_PAYLOAD = 220 # Roughly 220 bytes for plain text on Meshtastic LoRa
 LLM_MAX_TOKENS = 800 # 留給 reasoning 類模型的思考過程足夠空間，實際回覆送出前仍會被 Meshtastic payload 限制切段
+# Replies go out over LoRa: ~200 chars fits in one packet. The model has
+# no idea it's on a radio, so the budget must be stated in the prompt
+# itself. 190 leaves room for the "AI: " prefix added in
+# send_meshtastic_message, keeping the whole sent message under 200.
+MESHTASTIC_RESPONSE_INSTRUCTION = (
+    "You are replying over a Meshtastic LoRa radio. "
+    "Keep your ENTIRE reply under 190 characters (not tokens) so it "
+    "fits in a single radio packet once the 'AI:' prefix is added. "
+    "Plain text only: no markdown, no bullet lists, no emoji. "
+    "If it won't fit, give only the single most important point."
+)
 
 def check_internet_connection():
     """檢查是否有網際網路連線"""
@@ -661,11 +672,15 @@ def handle_incoming_meshtastic_message(sender_id, text_message):
 
     chat_history = []  # TODO: Implement persistent chat history for context
 
+    # LoRa replies must fit in one packet (~200 chars). The model doesn't
+    # know it's on a radio, so state the budget explicitly in the prompt.
+    prompt = f"{MESHTASTIC_RESPONSE_INSTRUCTION}\n\nIncoming radio message: {text_message}"
+
     try:
         if internet_connected:
-            final_response_text = call_llm_with_fallback(CLOUD_LLM_PROVIDERS, text_message, chat_history, True)
+            final_response_text = call_llm_with_fallback(CLOUD_LLM_PROVIDERS, prompt, chat_history, True)
         else:
-            final_response_text = call_llm_with_fallback(LOCAL_LLM_PROVIDERS, text_message, chat_history, False)
+            final_response_text = call_llm_with_fallback(LOCAL_LLM_PROVIDERS, prompt, chat_history, False)
     except Exception as e:
         final_response_text = f"❌ 所有 LLM 服務皆無法回應: {e}"
 
